@@ -348,6 +348,39 @@ export const factory = new MastraFactory({
 
 const preparedArgs = await factory.prepare();
 
+/**
+ * Tell the interface that authentication is off.
+ *
+ * The web app decides by asking `/auth/me`: a 404 means auth is disabled, a 401
+ * or 403 means it is on and nobody is signed in, and anything else is parsed as
+ * JSON. With `auth: null` that route is never mounted, so the request falls
+ * through to the single-page-app catch-all, which answers 200 with HTML. The app
+ * then parses HTML as JSON, throws, and renders a loading marker forever. It
+ * looks exactly like a broken build and it is a supported option missing one
+ * response.
+ *
+ * Mounting the 404 the app is looking for is what makes a fully self-hosted
+ * factory work with no identity provider at all: no Mastra platform account, no
+ * WorkOS, nothing outside this machine. That is the right trade for a workshop
+ * laptop and the wrong one for anything with more than one user on it, which is
+ * why it is tied to the same switch that turned auth off.
+ */
+if (authDisabled) {
+  preparedArgs.server = {
+    ...preparedArgs.server,
+    apiRoutes: [
+      {
+        path: '/auth/me',
+        method: 'GET' as const,
+        handler: async (c: { text: (body: string, status: number) => unknown }) =>
+          c.text('authentication is disabled on this deployment', 404),
+      },
+      ...(preparedArgs.server?.apiRoutes ?? []),
+    ],
+  };
+  console.log('[Auth] disabled: /auth/me answers 404, which is how the interface knows.');
+}
+
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled

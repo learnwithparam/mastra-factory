@@ -25,26 +25,44 @@ make factory-down     # stop everything, leaving no listener behind
 | Someone is signed in | See below |
 | Six issues open on the repository | `make lab-reset` |
 
-## Authentication cannot be turned off
+## Self-hosted does not mean no sign-in
 
-`MASTRACODE_AUTH_DISABLED=1` stops the auth routes being mounted, so `/auth/me` returns the server's
-HTML page instead of JSON, and the interface spins on a loading marker forever. It looks like a
-broken build and it is a supported configuration being used outside what it supports.
+Everything here runs on this machine: the server, its Postgres, its Redis, and the sandboxes agent
+sessions work in. Nothing is provisioned by anybody else. That is what Mastra's own documentation
+means by fully self-hosted, and its phrasing is exact: *configure your own authentication, storage
+and sandbox providers*. Authentication is on that list rather than absent from it.
 
-There are two working choices:
+`auth: null` is documented and it works, for the API. The web application refuses it and says so:
+*this server has no authentication provider configured*. Reading the shipped bundle explains why. It
+asks `/auth/me` and branches on the status: 404 means authentication is off, 401 or 403 means it is
+on and nobody is signed in, anything else is parsed as JSON.
 
-- **Mastra platform sign-in**, which is the default when nothing else is configured. One browser
-  sign-in, and the session persists. The server still runs here; only identity is theirs.
-- **WorkOS**, self-managed, by setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`. Everything stays on
-  your own infrastructure at the cost of another account to hold.
+With `auth: null` that route is never mounted, so the request reaches the single-page-app catch-all,
+which answers 200 with HTML. The application parses HTML as JSON, throws, and renders a loading
+marker forever, which is indistinguishable from a broken build.
+
+`src/mastra/index.ts` mounts the 404 the application is looking for when auth is disabled. That does
+not switch authentication off for the interface, which needs a provider either way. It replaces a
+hang with a sentence naming the problem, and that is worth having whichever provider you choose.
+
+So the self-hosted choice is an identity provider you own:
+
+- **WorkOS**, by setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`. Your account, your users, and
+  Mastra is not in the request path at all.
+- **Mastra platform sign-in**, the default when nothing else is set. One browser sign-in. The server
+  still runs here and only identity is theirs, which is the part you would be giving up.
 
 ## Webhooks reach a machine the internet cannot see
 
-GitHub cannot post to `localhost`. Issues will not arrive on their own without a tunnel.
+GitHub cannot post to `localhost`, so the webhook at `/web/github/webhook` never fires here.
 
-`MASTRACODE_GITHUB_RECONCILE_ENABLED` sweeps merged pull requests, and that is all it sweeps: it is
-not a substitute for issue intake. Run a webhook relay while a session is live, pointed at
-`http://localhost:4111/web/github/webhook`.
+The GitHub integration also carries a reconcile sweep, and it has a `reconcileIssues` path as well
+as a `reconcilePullRequests` one, so polling may cover issue intake on its own. That is read from
+the shipped code and not yet watched happening, which is the difference between likely and known.
+`MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS` is set to a minute here so a session does not wait five.
+
+Until it has been watched: run a webhook relay while a session is live, pointed at
+`http://localhost:4111/web/github/webhook`. On a host with a real domain, neither is necessary.
 
 ## Secrets
 

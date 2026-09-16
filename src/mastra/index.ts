@@ -29,6 +29,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth';
 import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webhook';
@@ -128,10 +129,33 @@ if (redisUrl) {
 //      platform-backed default provider.
 const authDisabled = process.env.MASTRACODE_AUTH_DISABLED === '1';
 const workosConfigured = Boolean(process.env.WORKOS_API_KEY?.trim() && process.env.WORKOS_CLIENT_ID?.trim());
+
+/**
+ * Sign-in that needs nobody else.
+ *
+ * `BETTER_AUTH_SECRET` selects Better Auth in its deferred mode: the provider
+ * builds its own instance on this deployment's own auth database, owns its
+ * migrations, and signs people in with an email and a password held in that
+ * database. No identity company is in the request path, which is the whole
+ * point of running a factory on your own machine.
+ *
+ * It is checked before WorkOS and before the platform default, because someone
+ * who has set this secret has said what they want.
+ */
+const betterAuthSecret = process.env.BETTER_AUTH_SECRET?.trim();
+
 let auth: IMastraAuthProvider | null | undefined;
 
 if (authDisabled) {
   auth = null;
+} else if (betterAuthSecret) {
+  auth = new MastraAuthBetterAuth({
+    secret: betterAuthSecret,
+    // A workshop machine registers its own user once. Leave it open here and
+    // close it on anything with a door to the internet.
+    signUpEnabled: process.env.MASTRACODE_SIGNUP_ENABLED !== '0',
+  }) as unknown as IMastraAuthProvider;
+  console.log('[Auth] Better Auth: email and password, stored in this deployment own database.');
 } else if (process.env.MASTRA_SHARED_API_URL?.trim()) {
   if (workosConfigured) {
     console.warn(

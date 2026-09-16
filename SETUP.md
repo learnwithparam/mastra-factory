@@ -45,12 +45,19 @@ marker forever, which is indistinguishable from a broken build.
 not switch authentication off for the interface, which needs a provider either way. It replaces a
 hang with a sentence naming the problem, and that is worth having whichever provider you choose.
 
-So the self-hosted choice is an identity provider you own:
+So the interface needs a provider, and one of them needs nobody else at all.
 
-- **WorkOS**, by setting `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`. Your account, your users, and
-  Mastra is not in the request path at all.
-- **Mastra platform sign-in**, the default when nothing else is set. One browser sign-in. The server
-  still runs here and only identity is theirs, which is the part you would be giving up.
+**Better Auth**, which this deployment uses. Set `BETTER_AUTH_SECRET` and the provider builds its own
+instance on this deployment's own database, owns its migrations, and signs people in with an email
+and a password held in that database. It is a library rather than a service: no account anywhere, no
+identity company in the request path, nothing to be locked out of.
+
+`make factory-user` creates the account. The password is generated, written to the secrets file and
+never printed, and running it twice signs in with the stored one rather than failing.
+
+Two others exist if you ever want them, and both hand sign-in to somebody else: WorkOS through
+`WORKOS_API_KEY` and `WORKOS_CLIENT_ID`, or Mastra platform sign-in, which is the default when
+nothing else is set.
 
 ## Webhooks reach a machine the internet cannot see
 

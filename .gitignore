@@ -6,3 +6,8 @@ node_modules/
 .mastra/
 *.log
 .DS_Store
+
+# Local state, never committed
+.sandboxes/
+.mastra/
+*.db
